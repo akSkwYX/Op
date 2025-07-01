@@ -1,4 +1,4 @@
 (executable
  (public_name Op)
  (name main)
- (libraries Op))
+ (libraries Op lexer token))

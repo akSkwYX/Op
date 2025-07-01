@@ -1,0 +1,8 @@
+(library
+ (name token_type)
+ (modules token_type))
+
+(library
+ (name token)
+ (libraries token_type)
+ (modules token))
