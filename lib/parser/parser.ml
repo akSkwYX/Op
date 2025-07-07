@@ -1,7 +1,12 @@
-(* TODO : Change list type to enable adding at end in O(1) *)
+(* TODO :
+   - Change list type to enable adding at end in O(1) 
+   - Add panic mode to parser to handle multi error
+*)
 
 open Ast
 open Token_type
+
+exception Parsing_error of string
 
 let match_lexeme token lexeme_list = List.mem token.lexeme lexeme_list
 
@@ -20,7 +25,9 @@ let rec programme ast l =
 and declaration ast l =
   match l with
   | [] -> ast
-  | h :: t ->
+  | h :: t when match_lexeme h [ID] ->
+    match t with
+    | [] -> raise (Parsing_error "[" ^ h.line ^ "] Unfinished declaration")
 
 
 let parse (l : token list) =
