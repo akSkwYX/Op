@@ -1,4 +1,4 @@
-# Op language (unfinished yet)
+# Op language (in development)
 
 ## What is Op ?
 
