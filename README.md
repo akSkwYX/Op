@@ -23,7 +23,7 @@ I welcome any feedback or ideas. You can reach me at:
 ### Fibonacci function
 
 ```
-fibo n -> n <= 1 ? 1 : fibo (n-1) + fibo (n-2)
+fibo n -> n <= 1 ? 1 : fibo >> n-1 + fibo >> n-2
 ```
 
 ### Iter function
@@ -35,7 +35,7 @@ iter <- i <- i + 1
 // Initialize variable k to 0
 k <- 0
 
-// While k ** k <= 5, apply iter to k
+// While k <= 5, apply iter to k
 iter >> k ** k <= 5
 ```
 
@@ -66,3 +66,13 @@ $var
 
   * Change list type to enable O(1) append operations
   * Add panic mode to the parser to handle multiple errors
+  * Optimize the parser to avoid unnecessary backtracking
+  * Modify some point on the grammar for it to be more user-friendly
+
+* **Interpreting**
+
+  * Optimize the interpreter :
+    * Better handling of recursive calls
+    * Add right tail recursion
+    * Better handling of environments
+  * Implement error handling

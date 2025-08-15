@@ -1,4 +1,5 @@
 (executable
  (public_name Op)
  (name main)
- (libraries Op lexer token))
+ (modes byte)
+ (libraries Op lexer parser token ast interpreter))

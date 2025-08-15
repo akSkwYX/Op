@@ -58,49 +58,48 @@ let tokenize (s:string) =
   let rec aux res current line =
     if current < 0 then res else
     match s.[current] with
-    | '$' -> aux ({ lexeme = DOLL; value = STRING "$"; line = line } :: res) (current - 1) line
-    | '?' -> aux ({ lexeme = QUEST_MARK; value = STRING "?"; line = line } :: res) (current - 1) line
+    | '$' -> aux ({ lexeme = DOLLAR; value = STRING "$"; line = line } :: res) (current - 1) line
+    | '?' -> aux ({ lexeme = QUESTION_MARK; value = STRING "?"; line = line } :: res) (current - 1) line
     | ':' -> aux ({ lexeme = COLON; value = STRING ":"; line = line } :: res) (current - 1) line
-    | '(' -> aux ({ lexeme = LEFT_PAREN; value = STRING "("; line = line } :: res) (current - 1) line
-    | ')' -> aux ({ lexeme = RIGHT_PAREN; value = STRING ")"; line = line } :: res) (current - 1) line
-    | '=' -> aux ({ lexeme = EQUAL; value = STRING "="; line = line } :: res) (current - 1) line
     | '+' -> aux ({ lexeme = PLUS; value = STRING "+"; line = line } :: res) (current - 1) line
     | '!' -> aux ({ lexeme = BANG; value = STRING "!"; line = line } :: res) (current - 1) line
+    | '/' -> aux ({ lexeme = SLASH; value = STRING "/"; line = line } :: res) (current - 1) line
+    | '(' -> aux ({ lexeme = LEFT_PAREN; value = STRING "("; line = line } :: res) (current - 1) line
+    | ')' -> aux ({lexeme = RIGHT_PAREN; value = STRING ")"; line = line } :: res) (current - 1) line
     | '{' -> aux ({ lexeme = LEFT_BRACE; value = STRING "{"; line = line } :: res) (current - 1) line
     | '}' -> aux ({ lexeme = RIGHT_BRACE; value = STRING "}"; line = line } :: res) (current - 1) line
-    | '[' -> aux ({ lexeme = LEFT_SQ_BRACK; value = STRING "["; line = line } :: res) (current - 1) line
-    | ']' -> aux ({ lexeme = RIGHT_SQ_BRACK; value = STRING "]"; line = line } :: res) (current - 1) line
-    | '_' -> aux ({ lexeme = UNDERSCORE; value = STRING "_"; line = line } :: res) (current - 1) line
-    | '^' -> aux ({ lexeme = CARET; value = STRING "^"; line = line } :: res) (current - 1) line
-    | '.' -> aux ({ lexeme = DOT; value = STRING "."; line = line } :: res) (current - 1) line
-    | ',' -> aux ({ lexeme = COMMA; value = STRING ","; line = line } :: res) (current - 1) line
-    | '/' -> aux ({ lexeme = SLASH; value = STRING "/"; line = line } :: res) (current - 1) line
-    | '\\' -> aux ({ lexeme = BACKSLASH; value = STRING "\\"; line = line } :: res) (current - 1) line
     | '&' ->
       begin
       match s.[ current - 1 ] with
-      | '&' -> aux ({ lexeme = AMPERSAND_AMPERSAND; value = STRING "&&"; line = line } :: res) (current-2) line
-      | _ -> aux ({ lexeme = AMPERSAND; value = STRING "&"; line = line } :: res) (current-1) line
+      | '&' -> aux ({ lexeme = D_AMPERSAND; value = STRING "&&"; line = line } :: res) (current-2) line
+      | _ -> raise (Lexing_error ("[ " ^ string_of_int (Utility.number_of_line s - line) ^ " ] Unknow character : '&'"))
       end
     | '|' ->
       begin
       match s.[current - 1] with
-      | '|' -> aux ({ lexeme = VERT_BAR_VERT_BAR; value = STRING "||"; line = line } :: res) (current - 2) line
-      | _ -> aux ({ lexeme = VERT_BAR; value = STRING "|"; line = line } :: res) (current - 2) line
-      end
-    | '<' -> 
-      begin
-      match s.[ current - 1 ] with
-      | '-' -> aux ({ lexeme = MINUS_INF; value = STRING "-<"; line = line } :: res) (current - 2) line 
-      | '+' -> aux ({ lexeme = PLUS_INF; value = STRING "+<"; line = line } :: res) (current - 2) line 
-      | '!' -> aux ({ lexeme = BANG_INF; value = STRING "!<"; line = line } :: res) (current - 2) line
-      | _ -> aux ({ lexeme = INF; value = STRING "<"; line = line} :: res) (current - 1) line 
+      | '|' -> aux ({ lexeme = D_VERT_BAR; value = STRING "||"; line = line } :: res) (current - 2) line
+      | _ -> raise (Lexing_error ("[ " ^ string_of_int (Utility.number_of_line s - line) ^ " ] Unknow character : '|'"))
       end
     | '>' -> 
       begin
       match s.[ current - 1 ] with
-      | '>' -> aux ({ lexeme = SUP_SUP; value = STRING ">>"; line = line } :: res) (current - 2) line 
+      | '>' -> aux ({ lexeme = D_SUP; value = STRING ">>"; line = line } :: res) (current - 2) line 
       | _ -> aux ({ lexeme = SUP; value = STRING ">"; line = line } :: res) (current - 1) line 
+      end
+    | '<' ->
+      begin
+      match s.[ current - 1 ] with
+      | '<' -> aux ({ lexeme = D_INF; value = STRING "<<"; line = line } :: res) (current - 2) line
+      | '>' -> aux ({ lexeme = SUP_INF; value = STRING "><"; line = line } :: res) (current - 2) line
+      | _ -> aux ({ lexeme = INF; value = STRING "<"; line = line } :: res) (current - 1) line
+      end
+    | '=' ->
+      begin
+      match s.[ current - 1 ] with
+      | '<' -> aux ({ lexeme = INF_EQUAL; value = STRING "<="; line = line } :: res) (current - 2) line
+      | '>' -> aux ({ lexeme = SUP_EQUAL; value = STRING ">="; line = line } :: res) (current - 2) line
+      | '!' -> aux ({ lexeme = BANG_EQUAL; value = STRING "!="; line = line } :: res) (current - 2) line
+      | _ -> aux ({ lexeme = EQUAL; value = STRING "="; line = line } :: res) (current - 1) line
       end
     | '-' -> 
       begin
@@ -114,7 +113,8 @@ let tokenize (s:string) =
       | '*' -> aux ({ lexeme = TIME_TIME; value = STRING "**"; line = line } :: res) (current - 2) line 
       | _ -> aux ({ lexeme = TIME; value = STRING "*"; line = line } :: res) (current - 1) line 
       end
-    | '\n' -> aux ({ lexeme = LINE_BREAK; value = STRING "\\n"; line = line } :: res) (current - 1) (line + 1)
+    (* | '\n' -> aux ({ lexeme = LINE_BREAK; value = STRING "\\n"; line = line } :: res) (current - 1) (line + 1) *)
+    | '\n' -> aux res (current - 1) (line + 1)
     | ' ' | '\t' | '\r' -> aux res (current - 1) line 
     | '"' ->
         let (token, current', line') = string s ( current - 1 ) line in
