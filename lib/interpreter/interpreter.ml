@@ -277,12 +277,12 @@ and interpret_equality env children =
       env, value, match last_value, value with
       | Number n1, Number n2 ->
         (match token.lexeme with
-        | Token_type.EQUAL -> res && (n1 == n2)
-        | Token_type.BANG_EQUAL -> res && (n1 == n2)
+        | Token_type.EQUAL -> res && (n1 = n2)
+        | Token_type.BANG_EQUAL -> res && (n1 = n2)
         | _ -> failwith "interpret_equality : Unreachable")
       | String s1, String s2 ->
         (match token.lexeme with
-        | Token_type.EQUAL -> res && String.compare s1 s2 == 0
+        | Token_type.EQUAL -> res && String.compare s1 s2 = 0
         | Token_type.BANG_EQUAL -> res && String.compare s1 s2 <> 0
         | _ -> failwith "interpret_equality : Unreachable")
       | Bool b1, Bool b2 ->
@@ -309,7 +309,7 @@ and interpret_logic_and env children =
     List.fold_left (fun (env, res) child ->
       let env, value = interpret env child in
       match value with
-      | Bool b -> env, res && b
+      | Bool b -> env, (res && b)
       | _ -> failwith "interpret_logic_and : Expected a boolean value"
     ) (env, true) children
   in
@@ -320,9 +320,9 @@ and interpret_logic_or env children =
     List.fold_left (fun (env, res) child ->
       let env, value = interpret env child in
       match value with
-      | Bool b -> env, res || b
+      | Bool b -> env, (res || b)
       | _ -> failwith "interpret_logic_or : Expected a boolean value"
-    ) (env, true) children
+    ) (env, false) children
   in
   env, Bool res
 

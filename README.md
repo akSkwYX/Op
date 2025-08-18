@@ -81,7 +81,7 @@ Result :
 ```
 create <- null;
 isEmpty l <- l = null;
-add l v <- isEmpty >> l ? {value <- v; next <- null;} : {value <- v; next <- l;};
+add l v <- {value <- v; next <- l;};
 remove l <- isEmpty >> l ? $"Trying to remove from an empty list" : l >> next;
 print l <- {m <- l; {$(m >> value) $" - " m <- remove >> m;} ** !isEmpty >> m};
 
@@ -115,11 +115,15 @@ Result :
 
 ## How to use
 
-Execute your code with the command :
+Currently no real build system is implemented.
+I use dune to build the project, you can build it with the following command :
 ```
-./bin/main.bc <your_file.op>
+dune build
 ```
-You can move the `main.bc` file where you want and is the only file you need to run the interpreter.
+and execute the interpreter with :
+```
+dune exec Op -- <your_file.op>
+```
 
 ## TODO
 

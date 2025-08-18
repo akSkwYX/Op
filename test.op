@@ -1,3 +1,4 @@
-iter i <- i + 1;
-k <- 0;
-{$k k <- iter >> k;} ** (k <= 5)
+list_get l i <- i < 0 || l = null ? $"Invalid argument" : i = 0 ? l >> value : list_get >> (l >> next) (i-1);
+
+l <- {value <- 2; next <- {value <- 1; next <- {value <- 0; next <- null;};};};
+$( list_get >> l 1 )
