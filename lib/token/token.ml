@@ -2,6 +2,7 @@ open Token_type
 
 let string_of_lexeme = function
   | LEFT_ARROW -> "LEFT_ARROW"
+  | SEMICOLON -> "SEMICOLON"
   | D_SUP -> "D_SUP"
   | DOLLAR -> "DOLLAR"
   | BANG -> "BANG"
@@ -27,9 +28,11 @@ let string_of_lexeme = function
   | D_VERT_BAR -> "D_VERT_BAR"
   | LEFT_BRACE -> "LEFT_BRACE"
   | RIGHT_BRACE -> "RIGHT_BRACE"
-  | SUP_INF -> "SUP_INF"
   | EMPTY -> "EMPTY"
-  | D_INF -> "D_INF"
+  | BANG_INF -> "BANG_INF"
+  | P -> "P"
+  | S -> "S"
+  | E -> "E"
 
 let string_of_value = function
   | STRING s -> s 

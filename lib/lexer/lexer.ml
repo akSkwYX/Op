@@ -58,6 +58,7 @@ let tokenize (s:string) =
   let rec aux res current line =
     if current < 0 then res else
     match s.[current] with
+    | ';' -> aux ({ lexeme = SEMICOLON; value = STRING ";"; line = line } :: res) (current - 1) line
     | '$' -> aux ({ lexeme = DOLLAR; value = STRING "$"; line = line } :: res) (current - 1) line
     | '?' -> aux ({ lexeme = QUESTION_MARK; value = STRING "?"; line = line } :: res) (current - 1) line
     | ':' -> aux ({ lexeme = COLON; value = STRING ":"; line = line } :: res) (current - 1) line
@@ -68,6 +69,12 @@ let tokenize (s:string) =
     | ')' -> aux ({lexeme = RIGHT_PAREN; value = STRING ")"; line = line } :: res) (current - 1) line
     | '{' -> aux ({ lexeme = LEFT_BRACE; value = STRING "{"; line = line } :: res) (current - 1) line
     | '}' -> aux ({ lexeme = RIGHT_BRACE; value = STRING "}"; line = line } :: res) (current - 1) line
+    | 'P' when not (isAlphaNumeric s.[ current - 1 ]) ->
+        aux ({ lexeme = P; value = STRING "P"; line = line } :: res) (current - 1) line
+    | 'E' when not (isAlphaNumeric s.[ current - 1 ]) ->
+        aux ({ lexeme = E; value = STRING "E"; line = line } :: res) (current - 1) line
+    | 'S' when not (isAlphaNumeric s.[ current - 1 ]) ->
+        aux ({ lexeme = S; value = STRING "S"; line = line } :: res) (current - 1) line
     | '&' ->
       begin
       match s.[ current - 1 ] with
@@ -89,8 +96,7 @@ let tokenize (s:string) =
     | '<' ->
       begin
       match s.[ current - 1 ] with
-      | '<' -> aux ({ lexeme = D_INF; value = STRING "<<"; line = line } :: res) (current - 2) line
-      | '>' -> aux ({ lexeme = SUP_INF; value = STRING "><"; line = line } :: res) (current - 2) line
+      | '!' -> aux ({ lexeme = BANG_INF; value = STRING "!<"; line = line } :: res) (current - 2) line
       | _ -> aux ({ lexeme = INF; value = STRING "<"; line = line } :: res) (current - 1) line
       end
     | '=' ->

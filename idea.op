@@ -1,0 +1,34 @@
+create <- null;
+isEmpty l <- l = null;
+add l v <- isEmpty >> l ? {value <- v; next <- null;} : {value <- v; next <- l;};
+remove l <- isEmpty >> l ? $"Trying to remove from empty list" : l >> next;
+print l <- {m <- l; {$(m >> value) $" - " m <- remove >> m;} ** ( !isEmpty >> m )};
+
+l <- create;
+$(isEmpty >> l)
+l <- add >> l 0;
+$"
+"
+(print >> l)
+l <- add >> l 1;
+$"
+
+"
+(print >> l)
+
+
+let remove l =
+   if l = null then
+      failwith "Trying to remove from empty list"
+   else
+      l.next
+
+let print l =
+   let m = ref l in
+   while !m <> null do 
+      print_int !m.value;
+      m := remove !m
+   done
+
+let l = {value = 1; next = {value = 0; next = null}}
+let () = print l
