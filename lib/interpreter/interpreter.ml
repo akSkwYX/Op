@@ -3,12 +3,12 @@ open Token_type
 
 let debug = false
 
-exception InterpreterError of string
+exception Interpreting_error of string
 
 type environment = {
-  enclosing : environment option;
-  variables : (string, value) Hashtbl.t;
-  functions : (string, token list * ast) Hashtbl.t;
+  mutable enclosing : environment option;
+  mutable variables : (string, value) Hashtbl.t;
+  mutable functions : (string, token list * ast) Hashtbl.t;
 }
 
 and value =
@@ -19,11 +19,39 @@ and value =
   | Empty of unit
   | Id of string
   | Block of environment
+  | Array of value array
 
 let create_environment enclosing =
   { enclosing = enclosing;
     variables = Hashtbl.create 10;
     functions = Hashtbl.create 10 }
+
+let environment_copy env =
+  let new_env = create_environment env.enclosing in
+  new_env.variables <- Hashtbl.copy env.variables;
+  new_env.functions <- Hashtbl.copy env.functions;
+  new_env
+
+let environment_union env1 env2 =
+  let new_env = create_environment ( Some env2 ) in
+  (match new_env.enclosing with
+  | Some env -> env.enclosing <- ( Some env1 )
+  | None -> failwith "environment_union : Unreachable");
+  new_env
+
+let environment_equal env1 env2 =
+  env1.enclosing = env2.enclosing &&
+  Hashtbl.length env1.variables = Hashtbl.length env2.variables &&
+  Hashtbl.length env1.functions = Hashtbl.length env2.functions &&
+  Hashtbl.fold (fun k v acc -> acc &&
+    try v = Hashtbl.find env2.variables k with 
+      | Not_found -> false 
+  ) env1.variables true &&
+  Hashtbl.fold (fun k v acc -> acc &&
+    try v = Hashtbl.find env2.functions k with 
+      | Not_found -> false 
+  ) env1.functions true
+
 
 let rec find_variable env id =
   try Hashtbl.find env.variables id with
@@ -56,35 +84,10 @@ let rec string_of_value = function
     "Block :\n" ^
     (Hashtbl.fold (fun k v acc -> acc ^ k ^ " : " ^ string_of_value v ^ "\n") env.variables "") ^
     (Hashtbl.fold (fun k _ acc -> acc ^ k ^ " : fun\n") env.functions "")
-
-(* let add_var env var (body : Ast.ast) = *)
-(*   let rec replace_in_var ( body : Ast.ast ) : Ast.ast = *)
-(*     match body with *)
-(*     | Id id -> *)
-(*       (try Hashtbl.find env.variables (Token.string_of_value id.value) with *)
-(*       | Not_found -> body) *)
-(*     | Empty | True | False | Null | String _ | Number _ -> body *)
-(*     | ParenExpression child -> ParenExpression (replace_in_var child) *)
-(*     | Unary (op, child) -> Unary (op, replace_in_var child) *)
-(*     | Call (called, args) -> Call (replace_in_var called, List.map (List.map replace_in_var) args) *)
-(*     | Factor children -> Factor (List.map (fun (t, child) -> (t, replace_in_var child)) children) *)
-(*     | Term children -> Term (List.map (fun (t, child) -> (t, replace_in_var child)) children) *)
-(*     | Comparison children -> Comparison (List.map (fun (t, child) -> (t, replace_in_var child)) children) *)
-(*     | Equality children -> Equality (List.map (fun (t, child) -> (t, replace_in_var child)) children) *)
-(*     | LogicAnd children -> LogicAnd (List.map replace_in_var children) *)
-(*     | LogicOr children -> LogicOr (List.map replace_in_var children) *)
-(*     | If (cond, then_branch, else_branch) -> If (replace_in_var cond, replace_in_var then_branch, replace_in_var else_branch) *)
-(*     | While (cond, body) -> While (replace_in_var cond, replace_in_var body) *)
-(*     | Print child -> Print (replace_in_var child) *)
-(*     | Block statements -> Block (List.map replace_in_var statements) *)
-(*     | Declaration (t, params, body) -> Declaration (t, params, replace_in_var body) *)
-(*     | Prog declarations -> Prog (List.map replace_in_var declarations) *)
-(*   in *)
-(*   try Hashtbl.replace env.variables (Token.string_of_value var.value) (replace_in_var body) with *)
-(*   | Not_found -> failwith ("Variable not found : " ^ Token.string_of_value var.value) *)
-
-(* let add_var env var value = *)
-(*   Hashtbl.replace env.variables (Token.string_of_value var.value) value *)
+  | Array arr ->
+    "Array :\n[ " ^
+    (Array.fold_left (fun acc v -> acc ^ string_of_value v ^ "; ") "" arr) ^
+    "]"
 
 let rec interpret ( env : environment ) ( ast : Ast.ast ) =
   let () = if debug then 
@@ -100,10 +103,9 @@ let rec interpret ( env : environment ) ( ast : Ast.ast ) =
     | Null -> env, Null
     | String t -> env, String ( Token.string_of_value t.value )
     | Number t -> env, Number ( Token.float_of_value t.value )
-    (* | Id t -> (try interpret env (Hashtbl.find env.variables (Token.string_of_value t.value)) with *)
-    (*   | Not_found -> env, Id (Token.string_of_value t.value)) *)
     | Id t -> (try env, find_variable env (Token.string_of_value t.value) with
       | Failure _ -> env, Id (Token.string_of_value t.value))
+    | Array children -> env, Array (Array.of_list (List.map (fun child -> interpret env child |> snd) children))
     | ParenExpression child -> interpret env child
     | Unary (t, child) -> interpret_unary env t child
     | Call (called, arguments_list_list) -> interpret_call env called arguments_list_list
@@ -130,10 +132,16 @@ and interpret_unary env t child =
   | Token_type.BANG ->
       (match child_value with
        | Bool b -> env, Bool (not b)
+       | Array a -> env, Array (Array.map (fun v -> match v with
+          | Bool b -> Bool (not b)
+          | _ -> raise (Interpreting_error "Unary operator '!' expects a boolean value array")) a)
        | _ -> failwith "Unary operator '!' expects a boolean value")
   | Token_type.MINUS ->
       (match child_value with
        | Number n -> env, Number (-. n)
+       | Array a -> env, Array (Array.map (fun v -> match v with
+          | Number n -> Number (-. n)
+          | _ -> raise (Interpreting_error "Unary operator '-' expects a number value array")) a)
        | _ -> failwith "Unary operator '-' expects a number value")
   | _ -> failwith ("interpret_unary : Unreachable")
 
@@ -188,6 +196,24 @@ and interpret_call env called arguments_list_list =
             end
         | _ -> failwith "Block call must have a single identifier argument"
         end
+      | Array a ->
+        begin
+        match arguments_list with
+        | [] -> raise (Interpreting_error "Array call expects at least one argument")
+        | [Number n] -> let index = int_of_float (Token.float_of_value n.value) in
+            if index < 0 then
+              raise (Interpreting_error "Array index cannot be negative")
+            else if index >= Array.length a then
+              raise (Interpreting_error "Array index out of bounds")
+            else
+              aux env (Array.get a index) rest
+        | [Id id] -> let id_str = Token.string_of_value id.value in
+            if id_str = "len" || id_str = "length" then
+              aux env (Number (float_of_int (Array.length a))) rest
+            else
+              raise (Interpreting_error ("Unknown array method : " ^ id_str))
+        | _ -> raise (Interpreting_error "Array call expects a single number or identifier argument")
+        end
       | _ -> failwith "Called value must be an identifier representing a function"
   in
   aux env called_value arguments_list_list
@@ -212,6 +238,19 @@ and interpret_factor env children =
       ) (env, n) rest
       in
       env, Number n
+    | Array a ->
+      List.fold_left (fun (env, acc) (token, child) ->
+        let env, value = interpret env child in
+        env, match token.lexeme with
+        | Token_type.SLASH -> raise (Interpreting_error "Array does not support '/' operator")
+        | Token_type.TIME ->
+          (match value with
+          | Number n -> (match acc with
+            | Array [| v |] -> Array ( Array.make (int_of_float n) v )
+            | Array arr_acc -> Array ( Array.make (int_of_float n) (Array arr_acc))
+            | _ -> failwith "interpret_factor : Unreachable")
+          | _ -> raise (Interpreting_error "Array can only be multiplied by a number"))
+        | _ -> failwith "interpret_factor : Unreachable") (env, Array a) rest
     | _ -> failwith "interpret_factor : Expected a number value"
 
 and interpret_term env children =
@@ -234,6 +273,46 @@ and interpret_term env children =
       ) (env, n) rest
       in
       env, Number n
+    | String s ->
+      let env, s =
+      List.fold_left (fun (env, acc) (token, child) ->
+        let env, value = interpret env child in
+        env, match value with
+        | String s ->
+          (match token.lexeme with
+          | Token_type.PLUS -> acc ^ s
+          | Token_type.MINUS -> failwith "interpret_term : Cannot use '-' operator on strings"
+          | _ -> failwith "interpret_term : Unreachable")
+        | _ -> raise (Interpreting_error "Cannot add a string to a non-string value")
+      ) (env, s) rest
+      in
+      env, String s
+    | Block b_env ->
+      let env, new_env =
+        List.fold_left (fun (env, acc) (token, child) ->
+          let env, value = interpret env child in
+          env, match value with
+          | Block b_env -> (match token.lexeme with
+            | Token_type.PLUS -> environment_union acc b_env
+            | Token_type.MINUS -> raise (Interpreting_error "Cannot use '-' operator on blocks")
+            | _ -> failwith "interpret_term : Unreachable")
+          | _ -> raise (Interpreting_error "Cannot add a block and a non-block value")
+        ) (env, b_env) rest
+      in
+      env, Block new_env
+    | Array a ->
+      let env, new_array =
+      List.fold_left (fun (env, acc) (token, child) ->
+        let env, value = interpret env child in
+        env, match value with
+        | Array a -> (match token.lexeme with
+          | Token_type.PLUS -> Array.append acc a
+          | Token_type.MINUS -> Array.of_list (List.filter (fun v -> not (Array.mem v a)) ( Array.to_list acc ))
+          | _ -> failwith "interpret_term : Unreachable")
+        | _ -> raise (Interpreting_error "Cannot add or subtract an array and a non-array value")
+      ) (env, a) rest
+      in
+      env, Array new_array
     | _ -> failwith "interpret_term : Expected a number value"
 
 and interpret_comparison env children =
@@ -294,6 +373,16 @@ and interpret_equality env children =
         (match token.lexeme with
         | Token_type.EQUAL -> res && true
         | Token_type.BANG_EQUAL -> res && false
+        | _ -> failwith "interpret_equality : Unreachable")
+      | Block b1, Block b2 ->
+        (match token.lexeme with
+        | Token_type.EQUAL -> res && (environment_equal b1 b2)
+        | Token_type.BANG_EQUAL -> res && not (environment_equal b1 b2)
+        | _ -> failwith "interpret_equality : Unreachable")
+      | Array a1, Array a2 ->
+        (match token.lexeme with
+        | Token_type.EQUAL -> res && (try a1 = a2 with | _ -> false)
+        | Token_type.BANG_EQUAL -> res && (try a1 <> a2 with | _ -> true)
         | _ -> failwith "interpret_equality : Unreachable")
       | _ -> 
         (match token.lexeme with
@@ -359,6 +448,9 @@ and interpret_print env child =
                 ; env, Empty ()
   | Bool b -> print_string (string_of_bool b); env, Empty ()
   | Null -> print_string "null"; env, Empty ()
+  | Array a -> print_string ("[ " ^
+               (Array.fold_left (fun acc v -> acc ^ string_of_value v ^ "; ") "" a) ^ "]");
+               env, Empty ()
   | _ -> failwith "interpret_print : Unsupported value type for printing"
 
 and interpret_block env statements =

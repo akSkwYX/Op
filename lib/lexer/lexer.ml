@@ -69,6 +69,8 @@ let tokenize (s:string) =
     | ')' -> aux ({lexeme = RIGHT_PAREN; value = STRING ")"; line = line } :: res) (current - 1) line
     | '{' -> aux ({ lexeme = LEFT_BRACE; value = STRING "{"; line = line } :: res) (current - 1) line
     | '}' -> aux ({ lexeme = RIGHT_BRACE; value = STRING "}"; line = line } :: res) (current - 1) line
+    | '[' -> aux ({ lexeme = LEFT_BRACKET; value = STRING "["; line = line } :: res) (current - 1) line
+    | ']' -> aux ({ lexeme = RIGHT_BRACKET; value = STRING "]"; line = line } :: res) (current - 1) line
     | 'P' when not (isAlphaNumeric s.[ current - 1 ]) ->
         aux ({ lexeme = P; value = STRING "P"; line = line } :: res) (current - 1) line
     | 'E' when not (isAlphaNumeric s.[ current - 1 ]) ->

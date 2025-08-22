@@ -431,6 +431,19 @@ and primary prec l =
       ParenExpression expr_ast, prec, t2
     | _ -> raise (Parsing_error "Unclosed parenthesised expression")
     end
+  | h :: t when match_lexeme h [LEFT_BRACKET] ->
+    begin
+    let rec elements res aux_l =
+      match aux_l with
+      | [] -> raise (Parsing_error "Unclosed array at end of document")
+      | h :: t when match_lexeme h [RIGHT_BRACKET] -> List.rev res, t
+      | _ ->
+        let expr_ast, _, expr_l = call_select_parse prec 3 aux_l in
+        elements (expr_ast :: res) expr_l
+    in
+    let elements_list, elements_l = elements [] t in
+    Array elements_list, prec, elements_l
+    end
   | _ -> raise Try_error
   (* | h :: _ -> raise (Parsing_error ("Unexpected token: " ^ Token.string_of_lexeme h.lexeme)) *)
 

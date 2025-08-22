@@ -33,6 +33,8 @@ let string_of_lexeme = function
   | P -> "P"
   | S -> "S"
   | E -> "E"
+  | LEFT_BRACKET -> "LEFT_BRACKET"
+  | RIGHT_BRACKET -> "RIGHT_BRACKET"
 
 let string_of_value = function
   | STRING s -> s 

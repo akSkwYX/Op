@@ -1,16 +1,3 @@
-(* let test = " *)
-(* fibo n <- n <= 1 ? 1 : fibo >> (n-1) << + fibo >> (n-2) << *)
-(* res <- fibo >< 5 *)
-(* $res *)
-(* " *)
-
-(* let test = " *)
-(*   test i <- $i *)
-(*   l <- 0 *)
-(*   {test >< l *)
-(*    l <- l + 1} ** l <= 5 *)
-(* " *)
-
 let file = try Sys.argv.(1) with _ -> failwith "Usage : ./main <filename>\ndune exec Op -- <filename>"
 
 let script =

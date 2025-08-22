@@ -3,6 +3,7 @@ open Token_type
 type ast =
   | Empty | True | False | Null
   | String of token | Number of token | Id of token
+  | Array of ast list
   | ParenExpression of ast
   | Unary of token * ast | Call of ast * ast list list
   | Factor of (token * ast) list
@@ -29,6 +30,10 @@ let string_of_ast ast =
     space depth ^ (match ast with
     | Empty -> "Empty" | True -> "True" | False -> "False" | Null -> "Null"
     | String v | Number v | Id v -> Token.string_of_value v.value
+    | Array children -> "Array : \n" ^
+                        List.fold_left (fun acc child ->
+                          acc ^ aux (depth + 1) child
+                        ) "" children
     | ParenExpression child -> "ParenExpression : \n" ^ aux (depth + 1) child
     | Unary ( t, child ) -> "Unary : "
                             ^ Token.string_of_value t.value ^ "\n"
