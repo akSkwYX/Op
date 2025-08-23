@@ -1,7 +1,16 @@
-a <- [0 1 2 3];
-$(a >> 0)
-$"
-"
-$(a >> len)
+list_create <- null;
+list_isEmpty <- l = null;
+list_append l v <- {value <- v; next <- l;};
+list_pop l <- list_isEmpty >> l ? $"Trying to pop from empty list" : l >> next;
+list_hd l <- list_isEmpty >> l ? $"Trying to hd from empty list" : l >> value;
+
+
+graph_create n <- [list_create] * n;
+graph_getNeighbours g s <- g >> s;
+
 a <- [null] * 10;
-$a
+$a;
+a >> 2 <- 2;
+$"
+";
+$a;

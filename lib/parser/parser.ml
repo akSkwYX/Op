@@ -97,33 +97,53 @@ and declaration prec l =
     (print_endline "Parsing declaration"; print_newline ();
     List.iter Token.print_token l; print_newline ())
   in
-  match l with
-  | [] -> Empty, prec, l
-  | id :: t when match_lexeme id [ID] ->
-    begin 
-    let rec get_params res l' =
-      match l' with
-      | [] -> raise (Parsing_error "Expect a declaration but only got an ID and arguments")
-      | h :: t when match_lexeme h [ID] -> get_params (res @ [h]) t
-      | _ -> res, l'
+  let stmt_ast, stmt_prec, stmt_l = call_next_parse prec l in
+  match stmt_l with
+  | [] -> stmt_ast, prec, stmt_l
+  | h :: t when match_lexeme h [LEFT_ARROW] ->
+    let decl_ast, _, decl_l = declaration prec t in
+    Declaration (stmt_ast, [], decl_ast), prec, decl_l
+  | h :: t when match_lexeme h [SEMICOLON] ->
+    stmt_ast, stmt_prec, t
+  | _ ->
+    let rec aux res aux_l =
+      match aux_l with
+      | [] -> raise (Parsing_error ("Expecting a semicolon at end of declaration or statement : " ^ 
+                    (List.fold_left (fun acc token -> acc ^ " " ^ Token.string_of_value token.value) ""
+                    (List.take (List.length l - List.length stmt_l) l))))
+      | h :: t when match_lexeme h [LEFT_ARROW] ->
+        let decl_ast, _, decl_l = declaration prec t in
+        Declaration (stmt_ast, List.rev res, decl_ast), prec, decl_l
+      | _ ->
+        let param_ast, _, param_l = call_next_parse prec aux_l in
+        aux (param_ast :: res) param_l
     in
-    let (params_list, params_l) = get_params [] t in
-    match params_l with
-    | [] -> failwith "Unreachable : declaration"
-    | h2 :: t2 when match_lexeme h2 [LEFT_ARROW] ->
-      let (decl_ast, _, decl_l) = declaration prec t2 in
-      (match decl_l with
-      | h :: t when match_lexeme h [SEMICOLON] ->
-        Declaration (id, params_list, decl_ast), prec, t
-      | _ -> raise (Parsing_error ("Missing semicolon after declaration : " ^
-                    Token.string_of_value id.value ^
-                    (List.fold_left (fun acc token -> acc ^ " " ^ Token.string_of_value token.value) 
-                                    "" params_list)
-                    ^ (List.fold_left (fun acc token -> acc ^ " " ^ Token.string_of_value token.value) ""
-                    (List.take (List.length params_l - List.length decl_l) params_l)))))
-    | _ -> call_next_parse prec l
-    end
-  | _ -> call_next_parse prec l
+    aux [] stmt_l
+  (* | id :: t when match_lexeme id [ID] -> *)
+  (*   begin  *)
+  (*   let rec get_params res l' = *)
+  (*     match l' with *)
+  (*     | [] -> raise (Parsing_error "Expect a declaration but only got an ID and arguments") *)
+  (*     | h :: t when match_lexeme h [ID] -> get_params (res @ [h]) t *)
+  (*     | _ -> res, l' *)
+  (*   in *)
+  (*   let (params_list, params_l) = get_params [] t in *)
+  (*   match params_l with *)
+  (*   | [] -> failwith "Unreachable : declaration" *)
+  (*   | h2 :: t2 when match_lexeme h2 [LEFT_ARROW] -> *)
+  (*     let (decl_ast, _, decl_l) = declaration prec t2 in *)
+  (*     (match decl_l with *)
+  (*     | h :: t when match_lexeme h [SEMICOLON] -> *)
+  (*       Declaration (id, params_list, decl_ast), prec, t *)
+  (*     | _ -> raise (Parsing_error ("Missing semicolon after declaration : " ^ *)
+  (*                   Token.string_of_value id.value ^ *)
+  (*                   (List.fold_left (fun acc token -> acc ^ " " ^ Token.string_of_value token.value)  *)
+  (*                                   "" params_list) *)
+  (*                   ^ (List.fold_left (fun acc token -> acc ^ " " ^ Token.string_of_value token.value) "" *)
+  (*                   (List.take (List.length params_l - List.length decl_l) params_l))))) *)
+  (*   | _ -> call_next_parse prec l *)
+  (*   end *)
+  (* | _ -> call_next_parse prec l *)
 
 and statement prec l =
   (*Need to make a huge optimization on this function currently very unefficient*)

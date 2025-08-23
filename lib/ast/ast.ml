@@ -16,7 +16,7 @@ type ast =
   | While of ast * ast
   | Print of ast
   | Block of ast list
-  | Declaration of token * (token list) * ast
+  | Declaration of ast * (ast list) * ast
   | Prog of ast list
 
 let string_of_ast ast = 
@@ -80,9 +80,9 @@ let string_of_ast ast =
                                     ^ aux (depth + 1) l_child  
                                     ^ aux (depth + 1) r_child
     | Print child -> "Print : \n" ^ aux (depth + 1) child
-    | Declaration ( t, params, child) -> "Declaration : " ^ Token.string_of_value t.value ^ " " ^
+    | Declaration ( t, params, child) -> "Declaration  \n" ^ aux (depth + 1) t ^
                                              List.fold_left (fun acc param -> 
-                                               acc ^ " " ^ Token.string_of_value param.value
+                                               acc ^ "\n" ^ aux (depth + 2) param
                                              ) "" params ^ "\n"
                                              ^ aux (depth + 1) child
     | Prog children -> "Prog : \n"

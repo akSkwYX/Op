@@ -1,3 +1,11 @@
+(* TODO : 
+   - Change declaration to have tree as id (so we can modify array elements)
+   - Unify functions and variables
+   - Add comments
+   - Add library support
+   - Change error handling to use exceptions
+*)
+
 open Ast
 open Token_type
 
@@ -8,7 +16,7 @@ exception Interpreting_error of string
 type environment = {
   mutable enclosing : environment option;
   mutable variables : (string, value) Hashtbl.t;
-  mutable functions : (string, token list * ast) Hashtbl.t;
+  mutable functions : (string, string list * ast) Hashtbl.t;
 }
 
 and value =
@@ -119,7 +127,7 @@ let rec interpret ( env : environment ) ( ast : Ast.ast ) =
     | While (condition, body) -> interpret_while env condition body
     | Print child -> interpret_print env child
     | Block statements -> interpret_block env statements
-    | Declaration (t, params, body) -> interpret_declaration env t params body
+    | Declaration (head, params, body) -> interpret_declaration env head params body
     | Prog declarations -> interpret_prog env declarations
   in
   let () = if debug then
@@ -145,6 +153,64 @@ and interpret_unary env t child =
        | _ -> failwith "Unary operator '-' expects a number value")
   | _ -> failwith ("interpret_unary : Unreachable")
 
+and aux_interpret_call env called_value arguments_list_list =
+  match arguments_list_list with
+  | [] ->
+    (match called_value with
+    | Id name ->
+      env, find_variable env name
+    | x -> env, x)
+  | arguments_list :: rest ->
+    match called_value with
+    | Id name -> 
+      let params, body = find_function env name in
+      let func_env = create_environment (Some env) in
+      let () = List.iter2 (fun param arg ->
+        add_var func_env param (interpret env arg |> snd)
+      ) params arguments_list in
+      let _, value = interpret func_env body in
+      aux_interpret_call env value rest
+    | Block block_env ->
+      begin
+      match arguments_list with
+      | [] -> failwith "Missing arguments for block call"
+      | [Id arg] -> 
+          begin
+          let id = Token.string_of_value arg.value in
+          try env, find_variable block_env id with
+            | Failure _ -> 
+              begin
+              let params, body = find_function block_env id in
+              let func_env = create_environment (Some block_env) in
+              let () = List.iter2 (fun param arg ->
+                add_var func_env param (interpret env arg |> snd)
+              ) params arguments_list in
+              let _, value = interpret func_env body in
+              aux_interpret_call env value rest
+              end
+          end
+      | _ -> failwith "Block call must have a single identifier argument"
+      end
+    | Array a ->
+      begin
+      match arguments_list with
+      | [] -> raise (Interpreting_error "Array call expects at least one argument")
+      | [Number n] -> let index = int_of_float (Token.float_of_value n.value) in
+          if index < 0 then
+            raise (Interpreting_error "Array index cannot be negative")
+          else if index >= Array.length a then
+            raise (Interpreting_error "Array index out of bounds")
+          else
+            aux_interpret_call env (Array.get a index) rest
+      | [Id id] -> let id_str = Token.string_of_value id.value in
+          if id_str = "len" || id_str = "length" then
+            aux_interpret_call env (Number (float_of_int (Array.length a))) rest
+          else
+            raise (Interpreting_error ("Unknown array method : " ^ id_str))
+      | _ -> raise (Interpreting_error "Array call expects a single number or identifier argument")
+      end
+    | _ -> failwith "Called value must be an identifier representing a function"
+
 and interpret_call env called arguments_list_list =
   (* let rec interpret_arguments env args = *)
   (*   match args with *)
@@ -155,68 +221,7 @@ and interpret_call env called arguments_list_list =
   (*       env_rest, value :: values_rest *)
   (* in *)
   let env, called_value = interpret env called in
-  let rec aux env called_value ( arguments_list_list : ast list list ) =
-    match arguments_list_list with
-    | [] ->
-      (match called_value with
-      | Id name ->
-        (* interpret env (try Hashtbl.find env.variables name with *)
-        (* | Not_found -> failwith ("Variable '" ^ name ^ "' not found")) *)
-        env, find_variable env name
-      | x -> env, x)
-    | arguments_list :: rest ->
-      match called_value with
-      | Id name -> 
-        let args, body = find_function env name in
-        let func_env = create_environment (Some env) in
-        let () = List.iter2 (fun arg param ->
-          add_var func_env (Token.string_of_value arg.value) (interpret env param |> snd)
-        ) args arguments_list in
-        let _, value = interpret func_env body in
-        aux env value rest
-      | Block block_env ->
-        begin
-        match arguments_list with
-        | [] -> failwith "Missing arguments for block call"
-        | [Id arg] -> 
-            begin
-            let id = Token.string_of_value arg.value in
-            try env, find_variable block_env id with
-              | Failure _ -> 
-                begin
-                let args, body = try find_function block_env id with
-                  | Failure _ -> failwith ("Variable or function '" ^ id ^ "' not found") in
-                let func_env = create_environment (Some block_env) in
-                let () = List.iter2 (fun arg param ->
-                  add_var func_env (Token.string_of_value arg.value) (interpret env param |> snd)
-                ) args arguments_list in
-                let _, value = interpret func_env body in
-                aux env value rest
-                end
-            end
-        | _ -> failwith "Block call must have a single identifier argument"
-        end
-      | Array a ->
-        begin
-        match arguments_list with
-        | [] -> raise (Interpreting_error "Array call expects at least one argument")
-        | [Number n] -> let index = int_of_float (Token.float_of_value n.value) in
-            if index < 0 then
-              raise (Interpreting_error "Array index cannot be negative")
-            else if index >= Array.length a then
-              raise (Interpreting_error "Array index out of bounds")
-            else
-              aux env (Array.get a index) rest
-        | [Id id] -> let id_str = Token.string_of_value id.value in
-            if id_str = "len" || id_str = "length" then
-              aux env (Number (float_of_int (Array.length a))) rest
-            else
-              raise (Interpreting_error ("Unknown array method : " ^ id_str))
-        | _ -> raise (Interpreting_error "Array call expects a single number or identifier argument")
-        end
-      | _ -> failwith "Called value must be an identifier representing a function"
-  in
-  aux env called_value arguments_list_list
+  aux_interpret_call env called_value arguments_list_list
 
 and interpret_factor env children =
   match children with
@@ -461,36 +466,72 @@ and interpret_block env statements =
   ) new_env statements in
   env, Block block_env
 
-and interpret_declaration env t params body =
-  match t.lexeme with
-  | Token_type.ID ->
-    begin
-    match params with
-    | [] ->
+and interpret_declaration env head params body =
+  let aux_interpret_declaration env value params body =
+    match value with
+    | Id id ->
       begin
-      add_var env (Token.string_of_value t.value) ( interpret env body |> snd );
-      env, Empty ()
+      match params with
+      | [] ->
+        add_var env id ( interpret env body |> snd );
+        env, Empty ()
+      | _ ->
+        begin
+        let paramsId = List.map (fun param ->
+          let _, param_value = interpret env param in
+          match param_value with
+          | Id s -> s
+          | _ -> raise (Interpreting_error "Parameter must evaluate to an identifier")
+        ) params in
+        add_function env id paramsId body;
+        env, Empty ()
+        end
       end
-    | _ ->
-      begin
-      (* Will change parameters parsing to enable putting what we want as parameters (as long as it interpret
-         to an Id) *)
-      (* let env, paramsId = List.fold_left (fun (env, paramsId) param -> *)
-      (*   let env, param_value = interpret env param in *)
-      (*   match param_value with *)
-      (*   | Id s -> env, (s::paramsId)  *)
-      (*   | _ -> failwith "interpret_declaration : Expected an identifier for parameter" *)
-      (* ) (env, []) params in *)
-      let paramsId = List.map (fun param ->
-        match param.lexeme with
-        | Token_type.ID -> param
-        | _ -> failwith "interpret_declaration : Expected an identifier for parameter"
-      ) params in
-      add_function env (Token.string_of_value t.value) paramsId body;
-      env, Empty ()
-      end
-    end
-  | _ -> failwith "interpret_declaration : Unreachable"
+    | _ -> raise (Interpreting_error "Function or variable name must be an identifier")
+  in
+  match head with
+  | Call (Id a, args) | ParenExpression (Call (Id a, args)) when (
+      try match find_variable env (Token.string_of_value a.value) with | Array _ -> true | _ -> false with 
+        | Failure _ -> false
+    ) ->
+      let rec aux current aux_args =
+        match aux_args with
+        | [] -> raise (Interpreting_error "Missing arguments for array element assignment")
+        | [ast_arg] :: [] -> 
+            let arg = interpret env ast_arg |> snd in
+            (match arg with
+            | Number n -> current.(int_of_float n) <- interpret env body |> snd; env, Empty ()
+            | Id id -> (match find_variable env id with
+            | Number n -> current.(int_of_float n) <- interpret env body |> snd; env, Empty ()
+                | _ -> raise (Interpreting_error "Array index must be a number"))
+            | _ -> raise (Interpreting_error "Array index must be a number"))
+        | [ast_arg] :: rest -> 
+            let aux n =
+              if n < 0 then
+                raise (Interpreting_error "Array index cannot be negative")
+              else
+                (match current.(n) with
+                | Array a -> aux a rest
+                | Block _ | Id _ -> 
+                  let _, value = aux_interpret_call env current.(n) rest in
+                  aux_interpret_declaration env value params body          
+                | _ -> raise (Interpreting_error "Trying to call an uncallable value"))
+            in
+            let arg = interpret env ast_arg |> snd in
+            (match arg with
+            | Number n -> let index = int_of_float n in aux index
+            | Id id -> (match find_variable env id with
+                | Number n -> let index = int_of_float n in aux index
+                | _ -> raise (Interpreting_error "Array index must be a number"))
+            | _ -> raise (Interpreting_error "Array index must be a number"))
+        | _ -> raise (Interpreting_error "Array index must be a single number")
+      in
+      let array = match find_variable env (Token.string_of_value a.value) with
+        | Array a -> a
+        | _ -> failwith "Unreachable"
+      in
+      aux array args
+  | _ -> aux_interpret_declaration env (interpret env head |> snd) params body
 
 and interpret_prog env declarations =
   List.fold_left (fun env declaration ->
@@ -504,4 +545,4 @@ let eval ast =
   if debug then
     (print_endline ("Final environment :\n" ^
     (Hashtbl.fold (fun k v acc -> acc ^ k ^ " : " ^ string_of_value v ^ "\n") env.variables "") ^ "\n" ^
-    (Hashtbl.fold (fun k (args, body) acc -> acc ^ k ^ " " ^ List.fold_left (fun acc arg -> acc ^ Token.string_of_value arg.value ) "" args ^ " : " ^ Ast.string_of_ast body ^ "\n") env.functions "")))
+    (Hashtbl.fold (fun k (args, body) acc -> acc ^ k ^ " " ^ List.fold_left (fun acc arg -> acc ^ arg ^ " ") "" args ^ ": " ^ Ast.string_of_ast body ^ "\n") env.functions "")))
