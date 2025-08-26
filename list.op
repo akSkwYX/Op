@@ -1,0 +1,44 @@
+create <- null;
+
+isEmpty l <- l = null;
+
+append l v <- {value <- v; next <- l;};
+
+pop l <- isEmpty >> l ? $"Trying to pop from empty list" : l >> next;
+
+hd l <- isEmpty >> l ? $"Trying to hd from empty list" : l >> value;
+
+concat l1 l2 <- isEmpty >> l1 ? l2 : {value <- hd >> l1; next <- concat >> (pop >> l1) l2;};
+
+revAppend l1 l2 <- isEmpty >> l1 ? l2 : revAppend >> (pop >> l1) (append >> l2 (hd >> l1));
+
+rev l <- revAppend >> l create;
+
+fold f acc l <- isEmpty >> l ? acc : fold >> f (f >> acc (l >> value)) (l >> next);
+
+iter f l <- isEmpty >> l ? 0 : {f >> (l >> value); iter >> f (l >> next);};
+
+print l <- {
+   f v <- $v;
+   iter >> f l;
+};
+
+mem l v <- {
+   f acc v2 <- acc || v = v2;
+   res <- fold >> f false l;
+} >> res;
+
+remove l v <- {
+   aux pre_l next_l <-
+      {
+      print >> pre_l; $" - "; print >> next_l; $"
+";
+      res <- isEmpty >> next_l ?
+         $"Trying to remove a value which isn't in list"
+      :
+         hd >> next_l = v ?
+            concat >> (rev >> pre_l) (pop >> next_l)
+         :
+            aux >> (append >> pre_l (hd >> next_l)) (pop >> next_l);} >> res
+   ;
+} >> aux >> create l;

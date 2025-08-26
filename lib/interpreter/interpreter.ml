@@ -113,6 +113,7 @@ let rec interpret ( env : environment ) ( ast : Ast.ast ) =
     | Number t -> env, Number ( Token.float_of_value t.value )
     | Id t -> (try env, find_variable env (Token.string_of_value t.value) with
       | Failure _ -> env, Id (Token.string_of_value t.value))
+    | Path t -> interpret_path env (Token.string_of_value t.value)
     | Array children -> env, Array (Array.of_list (List.map (fun child -> interpret env child |> snd) children))
     | ParenExpression child -> interpret env child
     | Unary (t, child) -> interpret_unary env t child
@@ -133,6 +134,16 @@ let rec interpret ( env : environment ) ( ast : Ast.ast ) =
   let () = if debug then
     (print_endline ("Result : " ^ string_of_value value)) in
   env, value
+
+and interpret_path env path =
+  let f = try In_channel.open_bin path with 
+    | Invalid_argument _ -> raise (Interpreting_error ("Unable to find file : " ^ path))
+  in
+  let s = In_channel.input_all f in
+  In_channel.close f; 
+  let file_env, _ = interpret (create_environment None) ( Parser.parse (Lexer.tokenize s) ) in
+  file_env.enclosing <- Some env;
+  env, Block file_env
 
 and interpret_unary env t child =
   let env, child_value = interpret env child in
@@ -172,6 +183,7 @@ and aux_interpret_call env called_value arguments_list_list =
       aux_interpret_call env value rest
     | Block block_env ->
       begin
+      block_env.enclosing <- Some env;
       match arguments_list with
       | [] -> failwith "Missing arguments for block call"
       | [Id arg] -> 
@@ -179,15 +191,7 @@ and aux_interpret_call env called_value arguments_list_list =
           let id = Token.string_of_value arg.value in
           try env, find_variable block_env id with
             | Failure _ -> 
-              begin
-              let params, body = find_function block_env id in
-              let func_env = create_environment (Some block_env) in
-              let () = List.iter2 (fun param arg ->
-                add_var func_env param (interpret env arg |> snd)
-              ) params arguments_list in
-              let _, value = interpret func_env body in
-              aux_interpret_call env value rest
-              end
+              aux_interpret_call block_env (Id id) rest
           end
       | _ -> failwith "Block call must have a single identifier argument"
       end
@@ -209,19 +213,17 @@ and aux_interpret_call env called_value arguments_list_list =
             raise (Interpreting_error ("Unknown array method : " ^ id_str))
       | _ -> raise (Interpreting_error "Array call expects a single number or identifier argument")
       end
-    | _ -> failwith "Called value must be an identifier representing a function"
+    | _ -> failwith "Trying to call an uncallable value"
 
 and interpret_call env called arguments_list_list =
-  (* let rec interpret_arguments env args = *)
-  (*   match args with *)
-  (*   | [] -> env, [] *)
-  (*   | arg :: rest -> *)
-  (*       let env, value = interpret env arg in *)
-  (*       let env_rest, values_rest = interpret_arguments env rest in *)
-  (*       env_rest, value :: values_rest *)
-  (* in *)
   let env, called_value = interpret env called in
-  aux_interpret_call env called_value arguments_list_list
+  try aux_interpret_call env called_value arguments_list_list with
+    | Failure _ -> raise (Interpreting_error ("Trying to call an uncallable value : "
+        ^ Ast.string_of_ast called
+        ^ " with arguments : "
+        ^ String.concat ", " (List.map (fun args -> 
+            "[" ^ String.concat ", " (List.map (fun arg -> 
+              Ast.string_of_ast arg) args) ^ "]") arguments_list_list)))
 
 and interpret_factor env children =
   match children with
@@ -478,16 +480,25 @@ and interpret_declaration env head params body =
       | _ ->
         begin
         let paramsId = List.map (fun param ->
-          let _, param_value = interpret env param in
+          let _, param_value = match param with
+            | Ast.Id id -> env, Id (Token.string_of_value id.value)
+            | _ -> interpret env param
+          in
           match param_value with
           | Id s -> s
-          | _ -> raise (Interpreting_error "Parameter must evaluate to an identifier")
+          | _ -> raise (Interpreting_error ("Parameter must evaluate to an identifier : " ^
+                        Ast.string_of_ast head ^ " with params : " ^ String.concat ", "
+                          (List.map (fun param -> Ast.string_of_ast param) params) ^
+                        " and body : " ^ Ast.string_of_ast body))
         ) params in
         add_function env id paramsId body;
         env, Empty ()
         end
       end
-    | _ -> raise (Interpreting_error "Function or variable name must be an identifier")
+    | _ -> raise (Interpreting_error ("Function or variable name must be an identifier for declaration : " ^
+                  Ast.string_of_ast head ^ " with params : " ^ String.concat ", "
+                    (List.map (fun param -> Ast.string_of_ast param) params) ^
+                  " and body : " ^ Ast.string_of_ast body))
   in
   match head with
   | Call (Id a, args) | ParenExpression (Call (Id a, args)) when (
@@ -531,6 +542,7 @@ and interpret_declaration env head params body =
         | _ -> failwith "Unreachable"
       in
       aux array args
+  | Ast.Id id -> aux_interpret_declaration env (Id (Token.string_of_value id.value)) params body
   | _ -> aux_interpret_declaration env (interpret env head |> snd) params body
 
 and interpret_prog env declarations =

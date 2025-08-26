@@ -8,7 +8,7 @@ type lexeme =
   | BANG
   | D_SUP
   | P | LEFT_PAREN | RIGHT_PAREN | LEFT_BRACKET | RIGHT_BRACKET
-  | ID | STRING | NUMBER
+  | ID | STRING | NUMBER | PATH
   | EMPTY
 
 type value = STRING of string | FLOAT of float

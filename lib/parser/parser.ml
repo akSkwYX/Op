@@ -61,13 +61,30 @@ let select_prec prec i =
   else
     { self = i; table = prec.table; op_prec_table = prec.op_prec_table }
 
-let call_next_parse prec =
-  let new_prec = next_prec prec in
-  snd (List.hd new_prec.table.(new_prec.self)) new_prec
+let call_next_parse self_lexeme prec =
+  let rec get_next l =
+    match l with
+    | [] | [_] -> 
+      let new_prec = next_prec prec in
+      snd (List.hd new_prec.table.(new_prec.self)) new_prec
+    | (lexeme, _) :: (_, f) :: _ when lexeme = self_lexeme ->
+      f prec
+    | _ :: t -> get_next t
+  in
+  get_next prec.table.(prec.self)
 
-let call_previous_parse prec =
-  let new_prec = previous_prec prec in
-  snd (List.hd new_prec.table.(new_prec.self)) new_prec
+let call_previous_parse self_lexeme prec =
+  let rec get_previous l =
+    match l with
+    | [] -> failwith "call_previous_parse : Unreachable"
+    | (lexeme, _) :: _ when lexeme = self_lexeme ->
+      let new_prec = previous_prec prec in
+      snd (List.hd new_prec.table.(new_prec.self)) new_prec
+    | (_, f) :: (lexeme, _) :: _ when lexeme = self_lexeme ->
+      f prec
+    | _ :: t -> get_previous t
+  in
+  get_previous prec.table.(prec.self)
 
 let call_self_parse prec =
   if prec.self < 0 || prec.self >= Array.length prec.table || prec.table.(prec.self) = [] then
@@ -89,7 +106,7 @@ let rec programme res prec l =
     | _ -> Prog (List.rev res)
     end
   | _ -> 
-    let (decl_ast, decl_prec, decl_l) = call_next_parse prec l in
+    let (decl_ast, decl_prec, decl_l) = call_next_parse P prec l in
     programme (decl_ast :: res) decl_prec decl_l
 
 and declaration prec l =
@@ -97,7 +114,7 @@ and declaration prec l =
     (print_endline "Parsing declaration"; print_newline ();
     List.iter Token.print_token l; print_newline ())
   in
-  let stmt_ast, stmt_prec, stmt_l = call_next_parse prec l in
+  let stmt_ast, stmt_prec, stmt_l = call_next_parse LEFT_ARROW prec l in
   match stmt_l with
   | [] -> stmt_ast, prec, stmt_l
   | h :: t when match_lexeme h [LEFT_ARROW] ->
@@ -115,35 +132,10 @@ and declaration prec l =
         let decl_ast, _, decl_l = declaration prec t in
         Declaration (stmt_ast, List.rev res, decl_ast), prec, decl_l
       | _ ->
-        let param_ast, _, param_l = call_next_parse prec aux_l in
+        let param_ast, _, param_l = call_next_parse LEFT_ARROW prec aux_l in
         aux (param_ast :: res) param_l
     in
     aux [] stmt_l
-  (* | id :: t when match_lexeme id [ID] -> *)
-  (*   begin  *)
-  (*   let rec get_params res l' = *)
-  (*     match l' with *)
-  (*     | [] -> raise (Parsing_error "Expect a declaration but only got an ID and arguments") *)
-  (*     | h :: t when match_lexeme h [ID] -> get_params (res @ [h]) t *)
-  (*     | _ -> res, l' *)
-  (*   in *)
-  (*   let (params_list, params_l) = get_params [] t in *)
-  (*   match params_l with *)
-  (*   | [] -> failwith "Unreachable : declaration" *)
-  (*   | h2 :: t2 when match_lexeme h2 [LEFT_ARROW] -> *)
-  (*     let (decl_ast, _, decl_l) = declaration prec t2 in *)
-  (*     (match decl_l with *)
-  (*     | h :: t when match_lexeme h [SEMICOLON] -> *)
-  (*       Declaration (id, params_list, decl_ast), prec, t *)
-  (*     | _ -> raise (Parsing_error ("Missing semicolon after declaration : " ^ *)
-  (*                   Token.string_of_value id.value ^ *)
-  (*                   (List.fold_left (fun acc token -> acc ^ " " ^ Token.string_of_value token.value)  *)
-  (*                                   "" params_list) *)
-  (*                   ^ (List.fold_left (fun acc token -> acc ^ " " ^ Token.string_of_value token.value) "" *)
-  (*                   (List.take (List.length params_l - List.length decl_l) params_l))))) *)
-  (*   | _ -> call_next_parse prec l *)
-  (*   end *)
-  (* | _ -> call_next_parse prec l *)
 
 and statement prec l =
   (*Need to make a huge optimization on this function currently very unefficient*)
@@ -161,27 +153,22 @@ and statement prec l =
       let () = if debug then
         print_endline "whileStmt failed, trying block"
       in
-      try block prec l with
+      try ifStmt prec l with
       | Try_error ->
         let () = if debug then
-          print_endline "block failed, trying ifStmt"
+          print_endline "ifStmt failed, trying expression"
         in
-        try ifStmt prec l with
-        | Try_error ->
-          let () = if debug then
-            print_endline "ifStmt failed, trying expression"
-          in
-          try expression prec l with
-            | Try_error ->
-                raise (Parsing_error ("Unrecognized statement or expression" ^
-                       List.fold_left (fun acc token -> acc ^ " " ^ Token.string_of_value token.value) "" l))
+        try expression prec l with
+          | Try_error ->
+              raise (Parsing_error ("Unrecognized statement or expression" ^
+                     List.fold_left (fun acc token -> acc ^ " " ^ Token.string_of_value token.value) "" l))
 
 and ifStmt prec l =
   let () = if debug then
     (print_endline "Parsing if statement"; print_newline ();
     List.iter Token.print_token l; print_newline ())
   in
-  let expr_ast, _, expr_l = call_next_parse prec l in
+  let expr_ast, _, expr_l = call_next_parse S prec l in
   match expr_l with
   | [] -> raise Try_error
   | h :: t when match_lexeme h [QUESTION_MARK] ->
@@ -192,7 +179,9 @@ and ifStmt prec l =
     | h2 :: t2 when match_lexeme h2 [COLON] ->
       let stmt_false_ast, _, stmt_false_l = call_self_parse prec t2 in
       If (expr_ast, stmt_true_ast, stmt_false_ast), prec, stmt_false_l
-    | _ -> raise ( Parsing_error "Missing false consequence in if statement" )
+    | _ -> raise ( Parsing_error ("Missing false consequence in if statement : " ^ 
+                  (List.fold_left (fun acc token -> acc ^ " " ^ Token.string_of_value token.value) ""
+                  (List.take (List.length l - List.length stmt_true_l) l))))
     end
   | _ -> raise Try_error
 
@@ -206,12 +195,12 @@ and whileStmt prec l =
     let () = if debug then
       print_endline "block failed, trying expression"
     in
-    call_next_parse prec l
+    call_next_parse S prec l
   in
   match stmt_l with
   | [] -> raise Try_error
   | h :: t when match_lexeme h [TIME_TIME] ->
-    let expr_ast, _, expr_l = call_next_parse prec t in
+    let expr_ast, _, expr_l = call_next_parse S prec t in
     While (expr_ast, stmt_ast), prec, expr_l 
   | _ -> raise Try_error
 
@@ -223,7 +212,7 @@ and printStmt prec l =
   match l with
   | [] -> Empty, prec, l
   | h :: t when match_lexeme h [DOLLAR] ->
-    let expr_ast, _, expr_l = call_next_parse prec t in
+    let expr_ast, _, expr_l = call_next_parse S prec t in
     Print expr_ast, prec, expr_l
   | _ -> raise Try_error
 
@@ -262,18 +251,18 @@ and expression prec l =
       Empty, change_prec prec h new_prec, t
     | _ -> raise (Parsing_error "Expected a number after '!<'")
     end
-  | _ -> call_next_parse prec l
+  | _ -> call_next_parse E prec l
 
 and logic_or prec l =
   let () = if debug then
     (print_endline "Parsing logic or"; print_newline ();
     List.iter Token.print_token l; print_newline ())
   in
-  let logic_and_ast, _, logic_and_l = call_next_parse prec l in
+  let logic_and_ast, _, logic_and_l = call_next_parse D_VERT_BAR prec l in
   let rec aux res aux_l =
     match aux_l with
     | h :: t when match_lexeme h [D_VERT_BAR] ->
-      let logic_and_ast, _, logic_and_l = call_next_parse prec t in
+      let logic_and_ast, _, logic_and_l = call_next_parse D_VERT_BAR prec t in
       aux (logic_and_ast :: res) logic_and_l
     | _ -> 
       begin
@@ -289,11 +278,11 @@ and logic_and prec l =
     (print_endline "Parsing logic_and"; print_newline ();
     List.iter Token.print_token l; print_newline ())
   in
-  let equality_ast, _, equality_l = call_next_parse prec l in
+  let equality_ast, _, equality_l = call_next_parse D_AMPERSAND prec l in
   let rec aux res aux_l =
     match aux_l with
     | h :: t when match_lexeme h [D_AMPERSAND] ->
-      let equality_ast, _, equality_l = call_next_parse prec t in
+      let equality_ast, _, equality_l = call_next_parse D_AMPERSAND prec t in
       aux (equality_ast :: res) equality_l
     | _ -> 
       begin
@@ -309,11 +298,11 @@ and equality prec l =
     (print_endline "Parsing equality"; print_newline ();
     List.iter Token.print_token l; print_newline ())
   in
-  let comparison_ast, _, comparison_l = call_next_parse prec l in
+  let comparison_ast, _, comparison_l = call_next_parse EQUAL prec l in
   let rec aux res aux_l =
     match aux_l with
     | h :: t when match_lexeme h [BANG_EQUAL; EQUAL] ->
-      let comparison_ast, _, comparison_l = call_next_parse prec t in
+      let comparison_ast, _, comparison_l = call_next_parse EQUAL prec t in
       aux ((h, comparison_ast ) :: res) comparison_l
     | _ -> 
       begin
@@ -329,11 +318,11 @@ and comparison prec l =
     (print_endline "Parsing comparison"; print_newline ();
     List.iter Token.print_token l; print_newline ())
   in
-  let term_ast, _, term_l = call_next_parse prec l in
+  let term_ast, _, term_l = call_next_parse SUP prec l in
   let rec aux res aux_l = 
     match aux_l with
     | h :: t when match_lexeme h [SUP; SUP_EQUAL; INF; INF_EQUAL] ->
-      let term_ast, _, term_l = call_next_parse prec t in
+      let term_ast, _, term_l = call_next_parse SUP prec t in
       aux ((h, term_ast ) :: res) term_l 
     | _ -> 
       begin
@@ -349,11 +338,11 @@ and term prec l =
     (print_endline "Parsing term"; print_newline ();
     List.iter Token.print_token l; print_newline ())
   in
-  let factor_ast, _, factor_l = call_next_parse prec l in
+  let factor_ast, _, factor_l = call_next_parse PLUS prec l in
   let rec aux res aux_l = 
     match aux_l with
     | h :: t when match_lexeme h [MINUS; PLUS] ->
-      let factor_ast, _, factor_l = call_next_parse prec t in
+      let factor_ast, _, factor_l = call_next_parse PLUS prec t in
       aux ((h, factor_ast ) :: res) factor_l 
     | _ -> 
       begin
@@ -369,11 +358,11 @@ and factor prec l =
     (print_endline "Parsing factor"; print_newline ();
     List.iter Token.print_token l; print_newline ())
   in
-  let unary_ast, _, unary_l = call_next_parse prec l in
+  let unary_ast, _, unary_l = call_next_parse TIME prec l in
   let rec aux res aux_l = 
     match aux_l with
     | h :: t when match_lexeme h [SLASH; TIME] ->
-      let unary_ast, _, unary_l = call_next_parse prec t in
+      let unary_ast, _, unary_l = call_next_parse TIME prec t in
       aux ((h, unary_ast ) :: res) unary_l 
     | _ -> 
       begin
@@ -394,7 +383,7 @@ and unary prec l =
   | h :: t when match_lexeme h [BANG; MINUS] ->
     let unary_ast, _, unary_l = call_self_parse prec t in
     Unary (h, unary_ast), prec, unary_l
-  | _ -> call_next_parse prec l
+  | _ -> call_next_parse BANG prec l
 
 and call prec l =
   let () = if debug then
@@ -405,12 +394,12 @@ and call prec l =
     match aux_l with
     | [] -> List.rev res, aux_l
     | _ -> 
-      try let primary_ast, _, primary_l = call_next_parse prec aux_l in
+      try let primary_ast, _, primary_l = call_next_parse D_SUP prec aux_l in
           arguments (primary_ast :: res) primary_l
       with 
       | Try_error -> List.rev res, aux_l
   in
-  let primary_ast, _, primary_l = call_next_parse prec l in
+  let primary_ast, _, primary_l = call_next_parse D_SUP prec l in
   let rec aux res aux_l = 
     match aux_l with
     | h :: t when match_lexeme h [D_SUP] ->
@@ -434,6 +423,7 @@ and primary prec l =
   | [] -> Empty, prec, l
   | h :: t when match_lexeme h [NUMBER] -> Number h, prec, t
   | h :: t when match_lexeme h [STRING] -> String h, prec, t
+  | h :: t when match_lexeme h [PATH] -> Path h, prec, t
   | h :: t when match_lexeme h [ID] ->
     begin
     match Token.string_of_value h.value with
@@ -450,6 +440,19 @@ and primary prec l =
     | h2 :: t2 when match_lexeme h2 [RIGHT_PAREN] ->
       ParenExpression expr_ast, prec, t2
     | _ -> raise (Parsing_error "Unclosed parenthesised expression")
+    end
+  | h :: t when match_lexeme h [LEFT_BRACE] ->
+    begin
+    let rec decl_star res aux_prec aux_l =
+      match aux_l with
+      | [] -> raise (Parsing_error "Unclosed block at end of file")
+      | h :: t when match_lexeme h [RIGHT_BRACE] ->
+        Block (List.rev res), prec, t
+      | _ ->
+        let decl_ast, decl_prec, decl_l = call_select_parse aux_prec 1 aux_l in
+        decl_star (decl_ast :: res) decl_prec decl_l
+    in
+    decl_star [] prec t
     end
   | h :: t when match_lexeme h [LEFT_BRACKET] ->
     begin

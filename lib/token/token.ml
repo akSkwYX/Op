@@ -35,6 +35,7 @@ let string_of_lexeme = function
   | E -> "E"
   | LEFT_BRACKET -> "LEFT_BRACKET"
   | RIGHT_BRACKET -> "RIGHT_BRACKET"
+  | PATH -> "PATH"
 
 let string_of_value = function
   | STRING s -> s 

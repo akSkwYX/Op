@@ -28,29 +28,46 @@ let string s current line =
   let value, current', line' = aux "" current line in
   { lexeme = STRING; value = STRING value; line = line }, current', line'
 
+let rec aux_id s value current' line' = 
+  if current' >= 0 then
+    if isAlphaNumeric s.[current'] then
+      aux_id s (String.make 1 s.[current'] ^ value) (current' - 1) line'
+    else
+      value, current', line'
+  else
+    value, current', line'
+
+let id s current line =
+  let value, current', line' = aux_id s (String.make 1 s.[current]) (current-1) line in
+  { lexeme = ID; value = STRING value; line = line }, current', line'
+
+let path s current line =
+  let rec aux value current' line' =
+    if current' < 0 then
+      raise (Lexing_error "Unfinished path")
+    else
+      match s.[current'] with
+      | '\'' -> value, (current'-1), line'
+      | '\n' -> aux ("\n"^value) (current'-1) (line'+1)
+      | c -> aux (String.make 1 c ^ value) (current'-1) line'
+  in
+  let value, current', line' = aux "" current line in
+  { lexeme = PATH; value = STRING value; line = line }, current', line'
+
 let number s current line =
   let rec aux value current' line' is_float =
     match s.[current'] with
     | '.' when is_float -> raise ( Lexing_error ("[ " ^ string_of_int (Utility.number_of_line s - line') ^ " ] Numbers are declared as <int>.<int> for floats or <int> for integers but not 10.000.000") )
     | '.' -> aux ("." ^ value) (current' - 1) line' true
     | c when isDigit c -> aux (String.make 1 c ^ value) (current' - 1) line' is_float
-    | _ -> value, current', line'
+    | c when isAlpha c -> aux_id s (String.make 1 c ^ value) (current' - 1) line', true
+    | _ -> (value, current', line'), false
   in
-  let value, current', line' = aux "" current line false in
-  { lexeme = NUMBER; value = FLOAT (float_of_string value); line = line }, current', line'
-
-let id s current line =
-  let rec aux value current' line' = 
-    if current' >= 0 then
-      if isAlphaNumeric s.[current'] then
-        aux (String.make 1 s.[current'] ^ value) (current' - 1) line'
-      else
-        value, current', line'
-    else
-      value, current', line'
-  in
-  let value, current', line' = aux (String.make 1 s.[current]) (current-1) line in
-  { lexeme = ID; value = STRING value; line = line }, current', line'
+  let (value, current', line'), is_id = aux "" current line false in
+  if is_id then
+    { lexeme = ID; value = STRING value; line = line }, current', line'
+  else
+    { lexeme = NUMBER; value = FLOAT (float_of_string value); line = line }, current', line'
 
 let tokenize (s:string) =
   let s = String.trim s in
@@ -71,6 +88,16 @@ let tokenize (s:string) =
     | '}' -> aux ({ lexeme = RIGHT_BRACE; value = STRING "}"; line = line } :: res) (current - 1) line
     | '[' -> aux ({ lexeme = LEFT_BRACKET; value = STRING "["; line = line } :: res) (current - 1) line
     | ']' -> aux ({ lexeme = RIGHT_BRACKET; value = STRING "]"; line = line } :: res) (current - 1) line
+    | '~' -> let rec skip_until current' line' =
+               if current' < 0 then
+                 raise (Lexing_error "Unclosed comment")
+               else
+                 match s.[current'] with
+                 | '~' -> aux res (current' - 1) line'
+                 | '\n' -> skip_until (current' - 1) (line' + 1)
+                 | _ -> skip_until (current' - 1) line'
+             in
+             skip_until (current - 1) line
     | 'P' when not (isAlphaNumeric s.[ current - 1 ]) ->
         aux ({ lexeme = P; value = STRING "P"; line = line } :: res) (current - 1) line
     | 'E' when not (isAlphaNumeric s.[ current - 1 ]) ->
@@ -121,11 +148,13 @@ let tokenize (s:string) =
       | '*' -> aux ({ lexeme = TIME_TIME; value = STRING "**"; line = line } :: res) (current - 2) line 
       | _ -> aux ({ lexeme = TIME; value = STRING "*"; line = line } :: res) (current - 1) line 
       end
-    (* | '\n' -> aux ({ lexeme = LINE_BREAK; value = STRING "\\n"; line = line } :: res) (current - 1) (line + 1) *)
     | '\n' -> aux res (current - 1) (line + 1)
     | ' ' | '\t' | '\r' -> aux res (current - 1) line 
     | '"' ->
         let (token, current', line') = string s ( current - 1 ) line in
+        aux (token :: res) current' line'
+    | '\'' ->
+        let (token, current', line') = path s ( current - 1 ) line in
         aux (token :: res) current' line'
     | c -> 
       if isDigit(c) then
