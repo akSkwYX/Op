@@ -1,0 +1,4 @@
+(lang dune 3.22)
+(name Op)
+(sections (lib .) (bin ../../bin) (doc ../../doc/Op))
+(files (lib (META dune-package opam)) (bin (Op)) (doc (README.md README.pdf)))

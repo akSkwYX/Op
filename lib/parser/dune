@@ -1,3 +1,9 @@
 (library
  (name parser)
+ (modules Parser)
+ (libraries token_type ast token))
+
+(library
+ (name parser_bis)
+ (modules Parser_bis)
  (libraries token_type ast token))

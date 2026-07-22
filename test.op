@@ -1,5 +1,7 @@
-list <- 'list.op';
+compose f g <- f >> g;
 
-l <- list >> create;
-l <- list >> append >> l 0;
-list >> print >> l;
+f x <- -x;
+
+id <- compose >> f f;
+
+$(id >> 1)
